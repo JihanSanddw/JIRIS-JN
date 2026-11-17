@@ -1,0 +1,15 @@
+# Environment
+.env
+**/.env
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Certificates and uploads
+**/certs/
+**/uploads/
+
+# Flutter generated files
+mobile/.dart_tool/
+mobile/build/

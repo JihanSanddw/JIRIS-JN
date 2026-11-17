@@ -42,6 +42,14 @@ app.get("/db-test", async (req, res) => {
 const authRoutes = require("./routes/authRoutes");
 app.use("/api/auth", authRoutes);
 
+const userRoutes = require("./routes/userRoutes");
+app.use("/api/users", userRoutes);
+
+const adminRoutes = require("./routes/adminRoutes");
+app.use("/api/admin", adminRoutes);
+
+
+
 app.listen(PORT, () => {
   console.log(`JIRIS API running on port ${PORT}`);
 });

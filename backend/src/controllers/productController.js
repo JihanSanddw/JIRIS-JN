@@ -1,20 +1,136 @@
 const pool = require("../config/database");
 
 // GET all products
+
+// GET all products with search and filters
 const getProducts = async (req, res) => {
   try {
-    const result = await pool.query(`
+    const {
+      search,
+      category_id,
+      company_id,
+      min_price,
+      max_price,
+    } = req.query;
+
+    // Build dynamic query
+    let query = `
       SELECT
         p.*,
-        c.name AS category_name
+        c.name AS category_name,
+        co.name AS company_name
       FROM products p
       JOIN categories c ON p.category_id = c.id
-      ORDER BY p.id ASC
-    `);
+      JOIN companies co ON p.company_id = co.id
+      WHERE 1=1
+    `;
+
+    const values = [];
+    let index = 1;
+
+    // Search product name and description
+    if (search && search.trim()) {
+      query += `
+        AND (
+          p.name ILIKE $${index}
+          OR p.description ILIKE $${index}
+        )
+      `;
+      values.push(`%${search.trim()}%`);
+      index++;
+    }
+
+    // Filter by category
+    if (category_id !== undefined) {
+      if (!/^\d+$/.test(category_id)) {
+        return res.status(400).json({
+          success: false,
+          message: "ID kategori tidak valid.",
+        });
+      }
+
+      query += ` AND p.category_id = $${index}`;
+      values.push(category_id);
+      index++;
+    }
+
+    // Filter by company
+    if (company_id !== undefined) {
+      if (!/^\d+$/.test(company_id)) {
+        return res.status(400).json({
+          success: false,
+          message: "ID perusahaan tidak valid.",
+        });
+      }
+
+      query += ` AND p.company_id = $${index}`;
+      values.push(company_id);
+      index++;
+    }
+
+    // Filter by minimum price
+    if (min_price !== undefined) {
+      if (
+        min_price.trim() === "" ||
+        !Number.isFinite(Number(min_price)) ||
+        Number(min_price) < 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Harga minimum tidak valid.",
+        });
+      }
+
+      query += ` AND p.price >= $${index}`;
+      values.push(Number(min_price));
+      index++;
+    }
+
+    // Filter by maximum price
+    if (max_price !== undefined) {
+      if (
+        max_price.trim() === "" ||
+        !Number.isFinite(Number(max_price)) ||
+        Number(max_price) < 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Harga maksimum tidak valid.",
+        });
+      }
+
+      query += ` AND p.price <= $${index}`;
+      values.push(Number(max_price));
+      index++;
+    }
+
+    // Validate price range
+    if (
+      min_price !== undefined &&
+      max_price !== undefined &&
+      Number(min_price) > Number(max_price)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Harga minimum tidak boleh lebih besar dari harga maksimum.",
+      });
+    }
+
+    query += " ORDER BY p.id ASC";
+
+    const result = await pool.query(query, values);
 
     return res.status(200).json({
       success: true,
       message: "Berhasil mengambil data produk.",
+      total: result.rows.length,
+      filters: {
+        search: search || null,
+        category_id: category_id || null,
+        company_id: company_id || null,
+        min_price: min_price ?? null,
+        max_price: max_price ?? null,
+      },
       data: result.rows,
     });
   } catch (error) {
@@ -26,6 +142,7 @@ const getProducts = async (req, res) => {
     });
   }
 };
+
 
 // GET detail product by ID
 const getProductById = async (req, res) => {
@@ -42,9 +159,11 @@ const getProductById = async (req, res) => {
     const result = await pool.query(`
       SELECT
         p.*,
-        c.name AS category_name
+        c.name AS category_name,
+        co.name AS company_name
       FROM products p
       JOIN categories c ON p.category_id = c.id
+      JOIN companies co ON p.company_id = co.id
       WHERE p.id = $1
     `, [id]);
 
@@ -72,10 +191,22 @@ const getProductById = async (req, res) => {
 
 // Validation
 const validateProduct = (body) => {
-  const { category_id, name, price, stock, description, image_url } = body;
+  const {
+    category_id,
+    company_id,
+    name,
+    price,
+    stock,
+    description,
+    image_url,
+  } = body;
 
   if (!category_id || !/^\d+$/.test(String(category_id))) {
     return "Kategori produk tidak valid.";
+  }
+
+  if (!company_id || !/^\d+$/.test(String(company_id))) {
+    return "Perusahaan produk tidak valid.";
   }
 
   if (typeof name !== "string" || !name.trim()) {
@@ -95,19 +226,26 @@ const validateProduct = (body) => {
   if (
     stock === undefined ||
     stock === null ||
+    stock === "" ||
     !Number.isInteger(Number(stock)) ||
     Number(stock) < 0
   ) {
     return "Stok harus berupa bilangan bulat dan tidak boleh negatif.";
   }
 
-  if (description !== undefined && description !== null &&
-      typeof description !== "string") {
+  if (
+    description !== undefined &&
+    description !== null &&
+    typeof description !== "string"
+  ) {
     return "Deskripsi harus berupa teks.";
   }
 
-  if (image_url !== undefined && image_url !== null &&
-      typeof image_url !== "string") {
+  if (
+    image_url !== undefined &&
+    image_url !== null &&
+    typeof image_url !== "string"
+  ) {
     return "URL gambar harus berupa teks.";
   }
 
@@ -118,7 +256,7 @@ const validateProduct = (body) => {
   return null;
 };
 
-// POST add new orodyc
+// POST add new product
 const createProduct = async (req, res) => {
   try {
     const validationError = validateProduct(req.body);
@@ -132,6 +270,7 @@ const createProduct = async (req, res) => {
 
     const {
       category_id,
+      company_id,
       name,
       description,
       price,
@@ -141,11 +280,12 @@ const createProduct = async (req, res) => {
 
     const result = await pool.query(`
       INSERT INTO products
-        (category_id, name, description, price, stock, image_url)
-      VALUES ($1, $2, $3, $4, $5, $6)
+        (category_id, company_id, name, description, price, stock, image_url)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *
     `, [
       category_id,
+      company_id,
       name.trim(),
       description?.trim() || null,
       Number(price),
@@ -164,7 +304,7 @@ const createProduct = async (req, res) => {
     if (error.code === "23503") {
       return res.status(400).json({
         success: false,
-        message: "Kategori yang dipilih tidak ditemukan.",
+        message: "Kategori atau perusahaan yang dipilih tidak ditemukan.",
       });
     }
 
@@ -175,7 +315,7 @@ const createProduct = async (req, res) => {
   }
 };
 
-// PUT udate podct
+// PUT update product
 const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
@@ -198,6 +338,7 @@ const updateProduct = async (req, res) => {
 
     const {
       category_id,
+      company_id,
       name,
       description,
       price,
@@ -209,16 +350,18 @@ const updateProduct = async (req, res) => {
       UPDATE products
       SET
         category_id = $1,
-        name = $2,
-        description = $3,
-        price = $4,
-        stock = $5,
-        image_url = $6,
+        company_id = $2,
+        name = $3,
+        description = $4,
+        price = $5,
+        stock = $6,
+        image_url = $7,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $7
+      WHERE id = $8
       RETURNING *
     `, [
       category_id,
+      company_id,
       name.trim(),
       description?.trim() || null,
       Number(price),
@@ -245,7 +388,7 @@ const updateProduct = async (req, res) => {
     if (error.code === "23503") {
       return res.status(400).json({
         success: false,
-        message: "Kategori yang dipilih tidak ditemukan.",
+        message: "Kategori atau perusahaan yang dipilih tidak ditemukan.",
       });
     }
 

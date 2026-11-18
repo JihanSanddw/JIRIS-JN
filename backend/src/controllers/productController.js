@@ -11,7 +11,50 @@ const getProducts = async (req, res) => {
       company_id,
       min_price,
       max_price,
+      page = "1",
+      limit = "10",
     } = req.query;
+
+    // Validate pagination
+    if (!/^\d+$/.test(page) || Number(page) < 1) {
+      return res.status(400).json({
+        success: false,
+        message: "Parameter page harus berupa angka minimal 1.",
+      });
+    }
+
+    if (!/^\d+$/.test(limit) || Number(limit) < 1) {
+      return res.status(400).json({
+        success: false,
+        message: "Parameter limit harus berupa angka minimal 1.",
+      });
+    }
+
+    if (Number(limit) > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Parameter limit maksimal 100.",
+      });
+    }
+
+    const currentPage = Number(page);
+    const pageLimit = Number(limit);
+
+    if (!Number.isSafeInteger(currentPage) || !Number.isSafeInteger(pageLimit)) {
+      return res.status(400).json({
+        success: false,
+        message: "Parameter pagination terlalu besar.",
+      });
+    }
+
+    const offset = (currentPage - 1) * pageLimit;
+
+    if (!Number.isSafeInteger(offset)) {
+      return res.status(400).json({
+        success: false,
+        message: "Parameter pagination terlalu besar.",
+      });
+    }
 
     // Build dynamic query
     let query = `
@@ -116,14 +159,65 @@ const getProducts = async (req, res) => {
       });
     }
 
-    query += " ORDER BY p.id ASC";
+    // Count total products before pagination
+    const countQuery = `
+      SELECT COUNT(*) AS total
+      FROM (${query}) AS filtered_products
+    `;
+
+    const countResult = await pool.query(countQuery, values);
+
+    const totalItems = Number(countResult.rows[0].total);
+    const totalPages = Math.ceil(totalItems / pageLimit);
+
+    // Sorting
+    const allowedSortColumns = {
+      name: "p.name",
+      price: "p.price",
+      created_at: "p.created_at",
+    };
+
+    const sortBy = req.query.sort_by || "created_at";
+    const order = (req.query.order || "desc").toLowerCase();
+
+    const sortColumn = allowedSortColumns[sortBy];
+
+    if (!sortColumn) {
+      return res.status(400).json({
+        success: false,
+        message: "Parameter sort_by tidak valid.",
+      });
+    }
+
+    if (!["asc", "desc"].includes(order)) {
+      return res.status(400).json({
+        success: false,
+        message: "Parameter order harus asc atau desc.",
+      });
+    }
+
+    query += ` ORDER BY ${sortColumn} ${order.toUpperCase()}, p.id ASC`;
+
+    // Pagination
+    query += ` LIMIT $${index} OFFSET $${index + 1}`;
+
+    values.push(pageLimit, offset);
 
     const result = await pool.query(query, values);
 
     return res.status(200).json({
       success: true,
       message: "Berhasil mengambil data produk.",
-      total: result.rows.length,
+
+      pagination: {
+        current_page: currentPage,
+        limit: pageLimit,
+        total_items: totalItems,
+        total_pages: totalPages,
+        has_next_page: currentPage < totalPages,
+        has_previous_page: currentPage > 1 && totalPages > 0,
+      },
+
       filters: {
         search: search || null,
         category_id: category_id || null,
@@ -131,6 +225,7 @@ const getProducts = async (req, res) => {
         min_price: min_price ?? null,
         max_price: max_price ?? null,
       },
+
       data: result.rows,
     });
   } catch (error) {

@@ -54,7 +54,8 @@ app.use("/api/categories", categoryRoutes);
 const productRoutes = require("./routes/productRoutes");
 app.use("/api/products", productRoutes);
 
-
+const companyRoutes = require("./routes/companyRoutes");
+app.use("/api/companies", companyRoutes);
 
 app.listen(PORT, () => {
   console.log(`JIRIS API running on port ${PORT}`);

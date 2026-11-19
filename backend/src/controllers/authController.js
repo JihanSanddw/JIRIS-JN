@@ -81,7 +81,6 @@ const register = async (req, res) => {
   }
 };
 
-
 // Login
 const login = async (req, res) => {
   try {

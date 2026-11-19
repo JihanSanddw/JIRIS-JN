@@ -238,7 +238,6 @@ const getProducts = async (req, res) => {
   }
 };
 
-
 // GET detail product by ID
 const getProductById = async (req, res) => {
   try {

@@ -60,6 +60,12 @@ app.use("/api/companies", companyRoutes);
 const uploadRoutes = require("./routes/uploadRoutes");
 app.use("/api/upload", uploadRoutes);
 
+const cartRoutes = require("./routes/cartRoutes");
+app.use("/api/cart", cartRoutes);
+
+const orderRoutes = require("./routes/orderRoutes");
+app.use("/api/orders", orderRoutes);
+
 app.listen(PORT, () => {
   console.log(`JIRIS API running on port ${PORT}`);
 });

@@ -1,6 +1,9 @@
-# Environment
+# Environment variables
 .env
+.env.*
+!.env.example
 **/.env
+**/.env.*
 
 # Dependencies
 node_modules/
@@ -12,4 +15,14 @@ node_modules/
 
 # Flutter generated files
 mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/.pub-cache/
+mobile/.pub/
 mobile/build/
+mobile/coverage/
+
+# IDE
+.idea/
+.vscode/

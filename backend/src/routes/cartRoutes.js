@@ -5,7 +5,7 @@ const {
   getCart,
   addCartItem,
   updateCartItem,
-  deleteCartItem
+  deleteCartItem,
 } = require("../controllers/cartController");
 
 const { authenticate, authorize } = require("../middleware/authMiddleware");

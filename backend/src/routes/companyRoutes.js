@@ -9,10 +9,7 @@ const {
   deleteCompany,
 } = require("../controllers/companyController");
 
-const {
-  authenticate,
-  authorize,
-} = require("../middleware/authMiddleware");
+const { authenticate, authorize } = require("../middleware/authMiddleware");
 
 router.get("/", getCompanies);
 router.get("/:id", getCompanyById);

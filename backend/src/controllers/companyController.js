@@ -40,7 +40,8 @@ const getCompanyById = async (req, res) => {
       });
     }
 
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT
         co.*,
         COUNT(p.id)::INTEGER AS total_products
@@ -48,7 +49,9 @@ const getCompanyById = async (req, res) => {
       LEFT JOIN products p ON p.company_id = co.id
       WHERE co.id = $1
       GROUP BY co.id
-    `, [id]);
+    `,
+      [id],
+    );
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -74,13 +77,7 @@ const getCompanyById = async (req, res) => {
 
 // Validation
 const validateCompany = (body) => {
-  const {
-    name,
-    description,
-    logo_url,
-    website_url,
-    contact_email,
-  } = body;
+  const { name, description, logo_url, website_url, contact_email } = body;
 
   if (typeof name !== "string" || !name.trim()) {
     return "Nama perusahaan wajib diisi.";
@@ -102,10 +99,7 @@ const validateCompany = (body) => {
     return "URL logo harus berupa teks.";
   }
 
-  if (
-    logo_url &&
-    !/^https?:\/\/\S+$/i.test(logo_url)
-  ) {
+  if (logo_url && !/^https?:\/\/\S+$/i.test(logo_url)) {
     return "URL logo harus menggunakan HTTP atau HTTPS.";
   }
 
@@ -117,10 +111,7 @@ const validateCompany = (body) => {
     return "URL website harus berupa teks.";
   }
 
-  if (
-    website_url &&
-    !/^https?:\/\/\S+$/i.test(website_url)
-  ) {
+  if (website_url && !/^https?:\/\/\S+$/i.test(website_url)) {
     return "URL website harus menggunakan HTTP atau HTTPS.";
   }
 
@@ -132,10 +123,7 @@ const validateCompany = (body) => {
     return "Email kontak harus berupa teks.";
   }
 
-  if (
-    contact_email &&
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact_email)
-  ) {
+  if (contact_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact_email)) {
     return "Format email kontak tidak valid.";
   }
 
@@ -154,26 +142,24 @@ const createCompany = async (req, res) => {
       });
     }
 
-    const {
-      name,
-      description,
-      logo_url,
-      website_url,
-      contact_email,
-    } = req.body;
+    const { name, description, logo_url, website_url, contact_email } =
+      req.body;
 
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       INSERT INTO companies
         (name, description, logo_url, website_url, contact_email)
       VALUES ($1, $2, $3, $4, $5)
       RETURNING *
-    `, [
-      name.trim(),
-      description?.trim() || null,
-      logo_url?.trim() || null,
-      website_url?.trim() || null,
-      contact_email?.trim() || null,
-    ]);
+    `,
+      [
+        name.trim(),
+        description?.trim() || null,
+        logo_url?.trim() || null,
+        website_url?.trim() || null,
+        contact_email?.trim() || null,
+      ],
+    );
 
     return res.status(201).json({
       success: true,
@@ -211,15 +197,11 @@ const updateCompany = async (req, res) => {
       });
     }
 
-    const {
-      name,
-      description,
-      logo_url,
-      website_url,
-      contact_email,
-    } = req.body;
+    const { name, description, logo_url, website_url, contact_email } =
+      req.body;
 
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       UPDATE companies
       SET
         name = $1,
@@ -230,14 +212,16 @@ const updateCompany = async (req, res) => {
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $6
       RETURNING *
-    `, [
-      name.trim(),
-      description?.trim() || null,
-      logo_url?.trim() || null,
-      website_url?.trim() || null,
-      contact_email?.trim() || null,
-      id,
-    ]);
+    `,
+      [
+        name.trim(),
+        description?.trim() || null,
+        logo_url?.trim() || null,
+        website_url?.trim() || null,
+        contact_email?.trim() || null,
+        id,
+      ],
+    );
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -275,7 +259,7 @@ const deleteCompany = async (req, res) => {
 
     const result = await pool.query(
       "DELETE FROM companies WHERE id = $1 RETURNING *",
-      [id]
+      [id],
     );
 
     if (result.rows.length === 0) {

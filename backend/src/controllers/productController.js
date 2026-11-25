@@ -1,9 +1,12 @@
-const pool = require("../config/database");
+const pool = require(`../config/database`);
 
+const { uploadToCloudinary, deleteFromCloudinary } = require(
+  `../services/cloudinaryService`,
+);
 // GET all products
 
 // GET all products with search and filters
-const getProducts = async (req, res) => {
+const getProducts = async (req, res, adminMode = false) => {
   try {
     const {
       search,
@@ -11,39 +14,42 @@ const getProducts = async (req, res) => {
       company_id,
       min_price,
       max_price,
-      page = "1",
-      limit = "10",
+      status,
+      page = `1`,
+      limit = `10`,
     } = req.query;
 
-    // Validate pagination
     if (!/^\d+$/.test(page) || Number(page) < 1) {
       return res.status(400).json({
         success: false,
-        message: "Parameter page harus berupa angka minimal 1.",
+        message: `Parameter page harus berupa angka minimal 1.`,
       });
     }
 
     if (!/^\d+$/.test(limit) || Number(limit) < 1) {
       return res.status(400).json({
         success: false,
-        message: "Parameter limit harus berupa angka minimal 1.",
+        message: `Parameter limit harus berupa angka minimal 1.`,
       });
     }
 
     if (Number(limit) > 100) {
       return res.status(400).json({
         success: false,
-        message: "Parameter limit maksimal 100.",
+        message: `Parameter limit maksimal 100.`,
       });
     }
 
     const currentPage = Number(page);
     const pageLimit = Number(limit);
 
-    if (!Number.isSafeInteger(currentPage) || !Number.isSafeInteger(pageLimit)) {
+    if (
+      !Number.isSafeInteger(currentPage) ||
+      !Number.isSafeInteger(pageLimit)
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Parameter pagination terlalu besar.",
+        message: `Parameter pagination terlalu besar.`,
       });
     }
 
@@ -52,33 +58,49 @@ const getProducts = async (req, res) => {
     if (!Number.isSafeInteger(offset)) {
       return res.status(400).json({
         success: false,
-        message: "Parameter pagination terlalu besar.",
+        message: `Parameter pagination terlalu besar.`,
       });
     }
 
     // Build dynamic query
     let query = `
-      SELECT
-        p.*,
-        c.name AS category_name,
-        co.name AS company_name
-      FROM products p
-      JOIN categories c ON p.category_id = c.id
-      JOIN companies co ON p.company_id = co.id
-      WHERE 1=1
-    `;
+        SELECT
+          p.*,
+          c.name AS category_name,
+          co.name AS company_name
+        FROM products p
+        JOIN categories c ON p.category_id = c.id
+        JOIN companies co ON p.company_id = co.id
+        WHERE 1=1
+      `;
 
     const values = [];
     let index = 1;
 
-    // Search product name and description
+    if (!adminMode) {
+      query += ` AND p.status = 'published'`;
+    }
+
+    if (adminMode && status && status !== "all") {
+      if (!["published", "draft"].includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: `Status produk tidak valid.`,
+        });
+      }
+
+      query += ` AND p.status = $${index}`;
+      values.push(status);
+      index++;
+    }
+
     if (search && search.trim()) {
       query += `
-        AND (
-          p.name ILIKE $${index}
-          OR p.description ILIKE $${index}
-        )
-      `;
+          AND (
+            p.name ILIKE $${index}
+            OR p.description ILIKE $${index}
+          )
+        `;
       values.push(`%${search.trim()}%`);
       index++;
     }
@@ -88,7 +110,7 @@ const getProducts = async (req, res) => {
       if (!/^\d+$/.test(category_id)) {
         return res.status(400).json({
           success: false,
-          message: "ID kategori tidak valid.",
+          message: `ID kategori tidak valid.`,
         });
       }
 
@@ -102,7 +124,7 @@ const getProducts = async (req, res) => {
       if (!/^\d+$/.test(company_id)) {
         return res.status(400).json({
           success: false,
-          message: "ID perusahaan tidak valid.",
+          message: `ID perusahaan tidak valid.`,
         });
       }
 
@@ -114,13 +136,13 @@ const getProducts = async (req, res) => {
     // Filter by minimum price
     if (min_price !== undefined) {
       if (
-        min_price.trim() === "" ||
+        min_price.trim() === `` ||
         !Number.isFinite(Number(min_price)) ||
         Number(min_price) < 0
       ) {
         return res.status(400).json({
           success: false,
-          message: "Harga minimum tidak valid.",
+          message: `Harga minimum tidak valid.`,
         });
       }
 
@@ -132,13 +154,13 @@ const getProducts = async (req, res) => {
     // Filter by maximum price
     if (max_price !== undefined) {
       if (
-        max_price.trim() === "" ||
+        max_price.trim() === `` ||
         !Number.isFinite(Number(max_price)) ||
         Number(max_price) < 0
       ) {
         return res.status(400).json({
           success: false,
-          message: "Harga maksimum tidak valid.",
+          message: `Harga maksimum tidak valid.`,
         });
       }
 
@@ -155,15 +177,15 @@ const getProducts = async (req, res) => {
     ) {
       return res.status(400).json({
         success: false,
-        message: "Harga minimum tidak boleh lebih besar dari harga maksimum.",
+        message: `Harga minimum tidak boleh lebih besar dari harga maksimum.`,
       });
     }
 
     // Count total products before pagination
     const countQuery = `
-      SELECT COUNT(*) AS total
-      FROM (${query}) AS filtered_products
-    `;
+        SELECT COUNT(*) AS total
+        FROM (${query}) AS filtered_products
+      `;
 
     const countResult = await pool.query(countQuery, values);
 
@@ -172,27 +194,27 @@ const getProducts = async (req, res) => {
 
     // Sorting
     const allowedSortColumns = {
-      name: "p.name",
-      price: "p.price",
-      created_at: "p.created_at",
+      name: `p.name`,
+      price: `p.price`,
+      created_at: `p.created_at`,
     };
 
-    const sortBy = req.query.sort_by || "created_at";
-    const order = (req.query.order || "desc").toLowerCase();
+    const sortBy = req.query.sort_by || `created_at`;
+    const order = (req.query.order || `desc`).toLowerCase();
 
     const sortColumn = allowedSortColumns[sortBy];
 
     if (!sortColumn) {
       return res.status(400).json({
         success: false,
-        message: "Parameter sort_by tidak valid.",
+        message: `Parameter sort_by tidak valid.`,
       });
     }
 
-    if (!["asc", "desc"].includes(order)) {
+    if (![`asc`, `desc`].includes(order)) {
       return res.status(400).json({
         success: false,
-        message: "Parameter order harus asc atau desc.",
+        message: `Parameter order harus asc atau desc.`,
       });
     }
 
@@ -207,7 +229,7 @@ const getProducts = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Berhasil mengambil data produk.",
+      message: `Berhasil mengambil data produk.`,
 
       pagination: {
         current_page: currentPage,
@@ -224,18 +246,23 @@ const getProducts = async (req, res) => {
         company_id: company_id || null,
         min_price: min_price ?? null,
         max_price: max_price ?? null,
+        status: adminMode ? status || "all" : "published",
       },
 
       data: result.rows,
     });
   } catch (error) {
-    console.error("Get products error:", error);
+    console.error(`Get products error:`, error);
 
     return res.status(500).json({
       success: false,
-      message: "Terjadi kesalahan pada server.",
+      message: `Terjadi kesalahan pada server.`,
     });
   }
+};
+
+const getAdminProducts = async (req, res) => {
+  return getProducts(req, res, true);
 };
 
 // GET detail product by ID
@@ -246,105 +273,94 @@ const getProductById = async (req, res) => {
     if (!/^\d+$/.test(id)) {
       return res.status(400).json({
         success: false,
-        message: "ID produk tidak valid.",
+        message: `ID produk tidak valid.`,
       });
     }
 
-    const result = await pool.query(`
-      SELECT
-        p.*,
-        c.name AS category_name,
-        co.name AS company_name
-      FROM products p
-      JOIN categories c ON p.category_id = c.id
-      JOIN companies co ON p.company_id = co.id
-      WHERE p.id = $1
-    `, [id]);
+    const result = await pool.query(
+      `
+        SELECT
+          p.*,
+          c.name AS category_name,
+          co.name AS company_name
+        FROM products p
+        JOIN categories c ON p.category_id = c.id
+        JOIN companies co ON p.company_id = co.id
+        WHERE p.id = $1
+        AND p.status = 'published'
+      `,
+      [id],
+    );
 
     if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "Produk tidak ditemukan.",
+        message: `Produk tidak ditemukan.`,
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: "Berhasil mengambil detail produk.",
+      message: `Berhasil mengambil detail produk.`,
       data: result.rows[0],
     });
   } catch (error) {
-    console.error("Get product error:", error);
+    console.error(`Get product error:`, error);
 
     return res.status(500).json({
       success: false,
-      message: "Terjadi kesalahan pada server.",
+      message: `Terjadi kesalahan pada server.`,
     });
   }
 };
 
 // Validation
 const validateProduct = (body) => {
-  const {
-    category_id,
-    company_id,
-    name,
-    price,
-    stock,
-    description,
-    image_url,
-  } = body;
+  const { category_id, company_id, name, price, stock, description, status } =
+    body;
 
   if (!category_id || !/^\d+$/.test(String(category_id))) {
-    return "Kategori produk tidak valid.";
+    return `Kategori produk tidak valid.`;
   }
 
   if (!company_id || !/^\d+$/.test(String(company_id))) {
-    return "Perusahaan produk tidak valid.";
+    return `Perusahaan produk tidak valid.`;
   }
 
-  if (typeof name !== "string" || !name.trim()) {
-    return "Nama produk wajib diisi.";
+  if (typeof name !== `string` || !name.trim()) {
+    return `Nama produk wajib diisi.`;
   }
 
   if (
     price === undefined ||
     price === null ||
-    price === "" ||
+    price === `` ||
     !Number.isFinite(Number(price)) ||
     Number(price) < 0
   ) {
-    return "Harga harus berupa angka dan tidak boleh negatif.";
+    return `Harga harus berupa angka dan tidak boleh negatif.`;
   }
 
   if (
     stock === undefined ||
     stock === null ||
-    stock === "" ||
+    stock === `` ||
     !Number.isInteger(Number(stock)) ||
     Number(stock) < 0
   ) {
-    return "Stok harus berupa bilangan bulat dan tidak boleh negatif.";
+    return `Stok harus berupa bilangan bulat dan tidak boleh negatif.`;
   }
 
   if (
     description !== undefined &&
     description !== null &&
-    typeof description !== "string"
+    typeof description !== `string`
   ) {
-    return "Deskripsi harus berupa teks.";
+    return `Deskripsi harus berupa teks.`;
   }
 
-  if (
-    image_url !== undefined &&
-    image_url !== null &&
-    typeof image_url !== "string"
-  ) {
-    return "URL gambar harus berupa teks.";
-  }
-
-  if (image_url && !/^https?:\/\/\S+$/i.test(image_url)) {
-    return "URL gambar harus menggunakan alamat HTTP atau HTTPS yang valid.";
+  if (status !== undefined && !["published", "draft"].includes(status)) {
+    return `Status produk harus published atau draft.`;
   }
 
   return null;
@@ -352,6 +368,8 @@ const validateProduct = (body) => {
 
 // POST add new product
 const createProduct = async (req, res) => {
+  let uploadedImage = null;
+
   try {
     const validationError = validateProduct(req.body);
 
@@ -369,55 +387,85 @@ const createProduct = async (req, res) => {
       description,
       price,
       stock,
-      image_url,
+      status = "published",
     } = req.body;
 
-    const result = await pool.query(`
-      INSERT INTO products
-        (category_id, company_id, name, description, price, stock, image_url)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING *
-    `, [
-      category_id,
-      company_id,
-      name.trim(),
-      description?.trim() || null,
-      Number(price),
-      Number(stock),
-      image_url?.trim() || null,
-    ]);
+    if (req.file) {
+      uploadedImage = await uploadToCloudinary(req.file);
+    }
+
+    const image_url = uploadedImage?.image_url || null;
+
+    const result = await pool.query(
+      `
+          INSERT INTO products
+            (
+              category_id,
+              company_id,
+              name,
+              description,
+              price,
+              stock,
+              image_url,
+              status
+            )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          RETURNING *
+        `,
+      [
+        category_id,
+        company_id,
+        name.trim(),
+        description?.trim() || null,
+        Number(price),
+        Number(stock),
+        image_url,
+        status,
+      ],
+    );
 
     return res.status(201).json({
       success: true,
-      message: "Produk berhasil ditambahkan.",
+      message: `Produk berhasil ditambahkan.`,
       data: result.rows[0],
     });
   } catch (error) {
-    console.error("Create product error:", error);
+    console.error(`Create product error:`, error);
 
-    if (error.code === "23503") {
+    // Hapus gambar dari Cloudinary jika penyimpanan database gagal
+    if (uploadedImage?.public_id) {
+      try {
+        await deleteFromCloudinary(uploadedImage.public_id);
+      } catch (deleteError) {
+        console.error(`Cloudinary cleanup error:`, deleteError.message);
+      }
+    }
+
+    if (error.code === `23503`) {
       return res.status(400).json({
         success: false,
-        message: "Kategori atau perusahaan yang dipilih tidak ditemukan.",
+        message: `Kategori atau perusahaan yang dipilih tidak ditemukan.`,
       });
     }
 
     return res.status(500).json({
       success: false,
-      message: "Terjadi kesalahan pada server.",
+      message: `Terjadi kesalahan pada server.`,
     });
   }
 };
 
 // PUT update product
 const updateProduct = async (req, res) => {
+  let uploadedImage = null;
+
   try {
     const { id } = req.params;
 
     if (!/^\d+$/.test(id)) {
       return res.status(400).json({
         success: false,
-        message: "ID produk tidak valid.",
+        message: `ID produk tidak valid.`,
       });
     }
 
@@ -430,65 +478,90 @@ const updateProduct = async (req, res) => {
       });
     }
 
-    const {
-      category_id,
-      company_id,
-      name,
-      description,
-      price,
-      stock,
-      image_url,
-    } = req.body;
+    const { category_id, company_id, name, description, price, stock, status } =
+      req.body;
 
-    const result = await pool.query(`
-      UPDATE products
-      SET
-        category_id = $1,
-        company_id = $2,
-        name = $3,
-        description = $4,
-        price = $5,
-        stock = $6,
-        image_url = $7,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = $8
-      RETURNING *
-    `, [
-      category_id,
-      company_id,
-      name.trim(),
-      description?.trim() || null,
-      Number(price),
-      Number(stock),
-      image_url?.trim() || null,
-      id,
-    ]);
+    // Ambil data produk lama
+    const existingProduct = await pool.query(
+      `SELECT * FROM products WHERE id = $1`,
+      [id],
+    );
 
-    if (result.rows.length === 0) {
+    if (existingProduct.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "Produk tidak ditemukan.",
+        message: `Produk tidak ditemukan.`,
       });
     }
 
+    // Pertahankan status lama jika tidak ada status baru
+    const updatedStatus = status ?? existingProduct.rows[0].status;
+
+    // Pertahankan gambar lama jika tidak ada file baru
+    let image_url = existingProduct.rows[0].image_url;
+
+    // Upload gambar baru jika admin mengirim file
+    if (req.file) {
+      uploadedImage = await uploadToCloudinary(req.file);
+      image_url = uploadedImage.image_url;
+    }
+
+    const result = await pool.query(
+      `
+          UPDATE products
+          SET
+            category_id = $1,
+            company_id = $2,
+            name = $3,
+            description = $4,
+            price = $5,
+            stock = $6,
+            image_url = $7,
+            status = $8,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = $9
+          RETURNING *
+        `,
+      [
+        category_id,
+        company_id,
+        name.trim(),
+        description?.trim() || null,
+        Number(price),
+        Number(stock),
+        image_url,
+        updatedStatus,
+        id,
+      ],
+    );
+
     return res.status(200).json({
       success: true,
-      message: "Produk berhasil diperbarui.",
+      message: `Produk berhasil diperbarui.`,
       data: result.rows[0],
     });
   } catch (error) {
-    console.error("Update product error:", error);
+    console.error(`Update product error:`, error);
 
-    if (error.code === "23503") {
+    // Bersihkan gambar baru jika proses database gagal
+    if (uploadedImage?.public_id) {
+      try {
+        await deleteFromCloudinary(uploadedImage.public_id);
+      } catch (deleteError) {
+        console.error(`Cloudinary cleanup error:`, deleteError.message);
+      }
+    }
+
+    if (error.code === `23503`) {
       return res.status(400).json({
         success: false,
-        message: "Kategori atau perusahaan yang dipilih tidak ditemukan.",
+        message: `Kategori atau perusahaan yang dipilih tidak ditemukan.`,
       });
     }
 
     return res.status(500).json({
       success: false,
-      message: "Terjadi kesalahan pada server.",
+      message: `Terjadi kesalahan pada server.`,
     });
   }
 };
@@ -501,39 +574,40 @@ const deleteProduct = async (req, res) => {
     if (!/^\d+$/.test(id)) {
       return res.status(400).json({
         success: false,
-        message: "ID produk tidak valid.",
+        message: `ID produk tidak valid.`,
       });
     }
 
     const result = await pool.query(
-      "DELETE FROM products WHERE id = $1 RETURNING *",
-      [id]
+      `DELETE FROM products WHERE id = $1 RETURNING *`,
+      [id],
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "Produk tidak ditemukan.",
+        message: `Produk tidak ditemukan.`,
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: "Produk berhasil dihapus.",
+      message: `Produk berhasil dihapus.`,
       data: result.rows[0],
     });
   } catch (error) {
-    console.error("Delete product error:", error);
+    console.error(`Delete product error:`, error);
 
     return res.status(500).json({
       success: false,
-      message: "Terjadi kesalahan pada server.",
+      message: `Terjadi kesalahan pada server.`,
     });
   }
 };
 
 module.exports = {
   getProducts,
+  getAdminProducts,
   getProductById,
   createProduct,
   updateProduct,

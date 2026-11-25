@@ -26,3 +26,22 @@ mobile/coverage/
 # IDE
 .idea/
 .vscode/
+
+# IDE project files
+*.iml
+
+# Flutter generated platform files
+mobile/android/.gradle/
+mobile/android/local.properties
+
+mobile/ios/Flutter/Generated.xcconfig
+mobile/ios/Flutter/flutter_export_environment.sh
+mobile/ios/Flutter/ephemeral/
+mobile/ios/ServiceDefinitions.json
+
+mobile/linux/flutter/ephemeral/
+mobile/macos/Flutter/ephemeral/
+mobile/windows/flutter/ephemeral/
+
+# Generated plugin symlinks
+mobile/**/.plugin_symlinks/

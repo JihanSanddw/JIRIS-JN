@@ -4,11 +4,7 @@ const path = require("path");
 
 require("dotenv").config();
 
-const caPath = path.resolve(
-  __dirname,
-  "../../",
-  process.env.DB_CA_PATH
-);
+const caPath = path.resolve(__dirname, "../../", process.env.DB_CA_PATH);
 
 const pool = new Pool({
   host: process.env.DB_HOST,
@@ -18,8 +14,8 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD,
   ssl: {
     rejectUnauthorized: true,
-    ca: fs.readFileSync(caPath, "utf8")
-  }
+    ca: fs.readFileSync(caPath, "utf8"),
+  },
 });
 
 module.exports = pool;

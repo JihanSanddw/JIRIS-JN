@@ -14,27 +14,27 @@ app.use(express.json());
 app.get("/", (req, res) => {
   res.json({
     success: true,
-    message: "Welcome to JIRIS API!"
+    message: "Welcome to JIRIS API!",
   });
 });
 
 app.get("/db-test", async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT NOW() AS server_time, current_database() AS database_name"
+      "SELECT NOW() AS server_time, current_database() AS database_name",
     );
 
     res.status(200).json({
       success: true,
       message: "JIRIS berhasil terhubung ke PostgreSQL Aiven!",
-      data: result.rows[0]
+      data: result.rows[0],
     });
   } catch (error) {
     console.error("Database error:", error.message);
 
     res.status(500).json({
       success: false,
-      message: "Koneksi database gagal."
+      message: "Koneksi database gagal.",
     });
   }
 });

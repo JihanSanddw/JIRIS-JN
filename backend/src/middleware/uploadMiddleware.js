@@ -1,37 +1,23 @@
 const multer = require("multer");
 
-// Format gambar yang diperbolehkan
-const allowedMimeTypes = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-];
+const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
 
-// Penyimpanan sementara menggunakan memory
 const storage = multer.memoryStorage();
 
-// Konfigurasi Multer
 const upload = multer({
   storage,
-
-  // Maksimal ukuran gambar 5 MB
   limits: {
     fileSize: 5 * 1024 * 1024,
   },
-
-  // Validasi format gambar
   fileFilter: (req, file, callback) => {
     if (!allowedMimeTypes.includes(file.mimetype)) {
-      return callback(
-        new Error("Format gambar harus JPG, PNG, atau WEBP.")
-      );
+      return callback(new Error("Format gambar harus JPG, PNG, atau WEBP."));
     }
 
     callback(null, true);
   },
 });
 
-// Middleware untuk menangani satu gambar
 const uploadSingleImage = (req, res, next) => {
   upload.single("image")(req, res, (error) => {
     if (error instanceof multer.MulterError) {

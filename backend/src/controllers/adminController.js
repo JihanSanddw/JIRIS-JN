@@ -7,14 +7,14 @@ const getDashboard = async (req, res) => {
       role: req.user.role,
       permissions: [
         "manage_products",
-        "manage_categories"
+        "manage_categories",
         // "manage_orders",
         // "manage_stock"
-      ]
-    }
+      ],
+    },
   });
 };
 
 module.exports = {
-  getDashboard
+  getDashboard,
 };

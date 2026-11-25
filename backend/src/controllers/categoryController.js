@@ -1,5 +1,10 @@
 const pool = require("../config/database");
 
+const {
+  uploadToCloudinary,
+  deleteFromCloudinary,
+} = require("../services/cloudinaryService");
+
 // GET all categories
 const getCategories = async (req, res) => {
   try {
@@ -40,7 +45,8 @@ const getCategoryById = async (req, res) => {
       });
     }
 
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT
         c.*,
         COUNT(p.id)::INTEGER AS total_products
@@ -48,7 +54,9 @@ const getCategoryById = async (req, res) => {
       LEFT JOIN products p ON p.category_id = c.id
       WHERE c.id = $1
       GROUP BY c.id
-    `, [id]);
+    `,
+      [id],
+    );
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -72,6 +80,7 @@ const getCategoryById = async (req, res) => {
   }
 };
 
+// Validate category
 const validateCategory = (body) => {
   const { name, description } = body;
 
@@ -92,6 +101,8 @@ const validateCategory = (body) => {
 
 // POST create category
 const createCategory = async (req, res) => {
+  let uploadedImage = null;
+
   try {
     const validationError = validateCategory(req.body);
 
@@ -104,14 +115,22 @@ const createCategory = async (req, res) => {
 
     const { name, description } = req.body;
 
-    const result = await pool.query(`
-      INSERT INTO categories (name, description)
-      VALUES ($1, $2)
+    let image_url = null;
+
+    if (req.file) {
+      uploadedImage = await uploadToCloudinary(req.file, "jiris/categories");
+
+      image_url = uploadedImage.image_url;
+    }
+
+    const result = await pool.query(
+      `
+      INSERT INTO categories (name, description, image_url)
+      VALUES ($1, $2, $3)
       RETURNING *
-    `, [
-      name.trim(),
-      description?.trim() || null,
-    ]);
+    `,
+      [name.trim(), description?.trim() || null, image_url],
+    );
 
     return res.status(201).json({
       success: true,
@@ -120,6 +139,14 @@ const createCategory = async (req, res) => {
     });
   } catch (error) {
     console.error("Create category error:", error);
+
+    if (uploadedImage?.public_id) {
+      try {
+        await deleteFromCloudinary(uploadedImage.public_id);
+      } catch (deleteError) {
+        console.error("Cloudinary cleanup error:", deleteError.message);
+      }
+    }
 
     return res.status(500).json({
       success: false,
@@ -130,6 +157,8 @@ const createCategory = async (req, res) => {
 
 // PUT update category
 const updateCategory = async (req, res) => {
+  let uploadedImage = null;
+
   try {
     const { id } = req.params;
 
@@ -151,25 +180,38 @@ const updateCategory = async (req, res) => {
 
     const { name, description } = req.body;
 
-    const result = await pool.query(`
-      UPDATE categories
-      SET
-        name = $1,
-        description = $2
-      WHERE id = $3
-      RETURNING *
-    `, [
-      name.trim(),
-      description?.trim() || null,
-      id,
-    ]);
+    const existingCategory = await pool.query(
+      `SELECT * FROM categories WHERE id = $1`,
+      [id],
+    );
 
-    if (result.rows.length === 0) {
+    if (existingCategory.rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: "Kategori tidak ditemukan.",
       });
     }
+
+    let image_url = existingCategory.rows[0].image_url;
+
+    if (req.file) {
+      uploadedImage = await uploadToCloudinary(req.file, "jiris/categories");
+
+      image_url = uploadedImage.image_url;
+    }
+
+    const result = await pool.query(
+      `
+      UPDATE categories
+      SET
+        name = $1,
+        description = $2,
+        image_url = $3
+      WHERE id = $4
+      RETURNING *
+    `,
+      [name.trim(), description?.trim() || null, image_url, id],
+    );
 
     return res.status(200).json({
       success: true,
@@ -178,6 +220,14 @@ const updateCategory = async (req, res) => {
     });
   } catch (error) {
     console.error("Update category error:", error);
+
+    if (uploadedImage?.public_id) {
+      try {
+        await deleteFromCloudinary(uploadedImage.public_id);
+      } catch (deleteError) {
+        console.error("Cloudinary cleanup error:", deleteError.message);
+      }
+    }
 
     return res.status(500).json({
       success: false,
@@ -199,8 +249,8 @@ const deleteCategory = async (req, res) => {
     }
 
     const result = await pool.query(
-      "DELETE FROM categories WHERE id = $1 RETURNING *",
-      [id]
+      `DELETE FROM categories WHERE id = $1 RETURNING *`,
+      [id],
     );
 
     if (result.rows.length === 0) {
@@ -221,7 +271,8 @@ const deleteCategory = async (req, res) => {
     if (error.code === "23503") {
       return res.status(409).json({
         success: false,
-        message: "Kategori tidak dapat dihapus karena masih digunakan oleh produk.",
+        message:
+          "Kategori tidak dapat dihapus karena masih digunakan oleh produk.",
       });
     }
 

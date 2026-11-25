@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/core/theme/jiris_theme.dart';
+import 'package:mobile/screens/admin/admin_dashboard_screen.dart';
 import 'package:mobile/screens/auth/register_screen.dart';
+import 'package:mobile/screens/customer/customer_home_screen.dart';
+import 'package:mobile/services/auth_service.dart';
 import 'package:mobile/widgets/buttons/jiris_button.dart';
 import 'package:mobile/widgets/inputs/jiris_text_field.dart';
 
@@ -17,6 +20,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
 
   bool _obscurePassword = true;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -25,22 +29,66 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _login() {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _login() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Form valid. API integration will follow.'),
-      ),
-    );
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final result = await AuthService.login(
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+
+      if (!mounted) return;
+
+      final user = result['user'];
+      final role = user['role'];
+
+      late Widget destination;
+
+      if (role == 'admin') {
+        destination = const AdminDashboardScreen();
+      } else if (role == 'customer') {
+        destination = const CustomerHomeScreen();
+      } else {
+        await AuthService.logout();
+
+        throw Exception('Role pengguna tidak dikenali.');
+      }
+
+      if (!mounted) return;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => destination),
+        (route) => false,
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      final message = error.toString().replaceFirst('Exception: ', '');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: JirisColors.error),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   void _showHelp() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Contact JIRIS support.'),
-      ),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Contact JIRIS support.')));
   }
 
   @override
@@ -53,9 +101,7 @@ class _LoginScreenState extends State<LoginScreen> {
             return SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight,
-                ),
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
                 child: IntrinsicHeight(
                   child: Form(
                     key: _formKey,
@@ -157,9 +203,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             onPressed: () {},
                             style: TextButton.styleFrom(
                               foregroundColor: JirisColors.primary,
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 10,
-                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
                             ),
                             child: const Text(
                               'Forgot password?',
@@ -169,8 +213,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
 
                         JirisButton(
-                          text: 'Sign in',
+                          text: 'Sign In',
                           onPressed: _login,
+                          isLoading: _isLoading,
                         ),
 
                         const SizedBox(height: 22),
@@ -194,9 +239,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             onPressed: () {},
                             style: OutlinedButton.styleFrom(
                               foregroundColor: JirisColors.primary,
-                              side: const BorderSide(
-                                color: Color(0xFFE9E3ED),
-                              ),
+                              side: const BorderSide(color: Color(0xFFE9E3ED)),
                               shape: const StadiumBorder(),
                             ),
                             child: const Text(
@@ -224,8 +267,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) =>
-                                          const RegisterScreen(),
+                                      builder: (_) => const RegisterScreen(),
                                     ),
                                   );
                                 },

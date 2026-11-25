@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/core/theme/jiris_theme.dart';
 import 'package:mobile/screens/auth/login_screen.dart';
+import 'package:mobile/services/auth_service.dart';
 import 'package:mobile/widgets/buttons/jiris_button.dart';
 import 'package:mobile/widgets/inputs/jiris_text_field.dart';
 
@@ -20,6 +21,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   bool _obscurePassword = true;
   bool _agreeToTerms = false;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -29,23 +31,44 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  void _register() {
-    if (!_formKey.currentState!.validate()) return;
-
-    if (!_agreeToTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please agree to the Terms and Privacy Policy.'),
-        ),
-      );
+  Future<void> _register() async {
+    if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Form valid. API integration will follow.'),
-      ),
-    );
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      await AuthService.register(
+        name: _nameController.text,
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Registrasi berhasil! Silakan login.')),
+      );
+
+      Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+
+      final message = error.toString().replaceFirst('Exception: ', '');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: JirisColors.error),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -58,9 +81,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             return SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight,
-                ),
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
                 child: IntrinsicHeight(
                   child: Form(
                     key: _formKey,
@@ -227,6 +248,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         JirisButton(
                           text: 'Create account',
                           onPressed: _register,
+                          isLoading: _isLoading,
                         ),
 
                         const SizedBox(height: 22),
@@ -244,8 +266,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   Navigator.pushReplacement(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) =>
-                                          const LoginScreen(),
+                                      builder: (_) => const LoginScreen(),
                                     ),
                                   );
                                 },

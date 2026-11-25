@@ -49,9 +49,7 @@ class WelcomeScreen extends StatelessWidget {
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const LoginScreen(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
                   );
                 },
               ),
@@ -59,7 +57,7 @@ class WelcomeScreen extends StatelessWidget {
               // SizedBox(
               //   width: double.infinity,
               //   height: 45,
-              //   child: 
+              //   child:
               //     ElevatedButton(
               //       onPressed: () {
               //         Navigator.push(
@@ -84,7 +82,6 @@ class WelcomeScreen extends StatelessWidget {
               //       ),
               //     ),
               // ),
-
               const SizedBox(height: 40),
             ],
           ),
